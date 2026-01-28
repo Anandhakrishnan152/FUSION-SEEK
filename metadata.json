@@ -1,0 +1,7 @@
+{
+  "name": "FusionSeek - Intelligent Multimodal Search",
+  "description": "An intelligent multimodal search and Q&A system that understands documents, images, and audio using semantic context and blockchain provenance.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
