@@ -1,6 +1,7 @@
 
 export type Modality = 'text' | 'image' | 'audio' | 'pdf';
 
+export type ViewType = 'chat' | 'vault' | 'blockchain' | 'analytics' | 'settings' | 'history' | 'profile';
 
 export interface VectorNode {
   id: string;

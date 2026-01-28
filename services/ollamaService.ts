@@ -5,7 +5,7 @@ const OLLAMA_BASE_URL = 'http://localhost:11434/api';
 const CHAT_MODEL = 'llama3';
 const VISION_MODEL = 'llava';
 const EMBED_MODEL = 'nomic-embed-text'; // Efficient embedding model
-const OLLAMA_ENABLED = false; // Module stopped by user request
+const OLLAMA_ENABLED = false; // Module active
 
 // --- Helper: Cosine Similarity ---
 const cosineSimilarity = (vecA: number[], vecB: number[]) => {

@@ -41,12 +41,22 @@ import {
   Server,
   Calendar,
   MessageSquare,
-  ExternalLink
+  ExternalLink,
+  Sun,
+  Moon,
+  User,
+  Fingerprint,
+  Award,
+  CreditCard
 } from 'lucide-react';
-import { FileMetadata, BlockchainRecord, ChatMessage, Modality } from './types';
+import { FileMetadata, BlockchainRecord, ChatMessage, Modality, ViewType } from './types';
 import { performMultimodalRAG, verifyHash, findSimilarImages, processAndIndexFile } from './services/ollamaService';
-
-type ViewType = 'chat' | 'vault' | 'blockchain' | 'analytics' | 'settings' | 'history';
+import { DinoGame } from './components/DinoGame';
+import { Typewriter } from './components/Typewriter';
+import { BackgroundAnimations } from './components/BackgroundAnimations';
+import { Sidebar } from './components/Sidebar';
+import { Header } from './components/Header';
+import { ProfileView } from './components/ProfileView';
 
 export default function App() {
   const [files, setFiles] = useState<FileMetadata[]>([]);
@@ -56,7 +66,7 @@ export default function App() {
     {
       id: 'welcome',
       role: 'assistant',
-      text: "System Initialized. Air-Gap Protocol Active (Ollama Adapter PAUSED).\n\nThe Ollama module is currently disabled. RAG features are unavailable.",
+      text: "System Initialized. Standard Protocol Active.\n\nRunning in lightweight mode without local LLM inference.\n\nI am ready for synchronization.",
       verificationDetails: { filesChecked: 0, discrepancies: 0, blockchainStatus: 'SECURE' }
     }
   ]);
@@ -75,6 +85,8 @@ export default function App() {
   const [modelType, setModelType] = useState<'pro' | 'flash'>('pro');
   const [securityLevel, setSecurityLevel] = useState<'standard' | 'strict' | 'paranoid'>('strict');
   const [showNeuralShimmer, setShowNeuralShimmer] = useState(true);
+  const [showDinoGame, setShowDinoGame] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -256,96 +268,37 @@ export default function App() {
   };
 
   return (
-    <div className={`flex h-screen bg-[#020617] text-slate-100 overflow-hidden selection:bg-indigo-500/30 ${!showNeuralShimmer ? 'no-shimmer' : ''}`}>
+    <div className={`flex h-screen overflow-hidden selection:bg-indigo-500/30 transition-colors duration-500 ease-in-out ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-slate-50 text-slate-900'
+      } ${!showNeuralShimmer ? 'no-shimmer' : ''}`}>
       {/* Background Decor */}
       <div className="fixed inset-0 pointer-events-none opacity-20">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/20 blur-[120px] rounded-full animate-pulse-glow"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full animate-pulse-glow" style={{ animationDelay: '2s' }}></div>
       </div>
 
+      {showDinoGame && <DinoGame onClose={() => setShowDinoGame(false)} />}
+
       {/* Main Sidebar */}
-      <aside className="w-20 lg:w-72 flex flex-col border-r border-white/5 glass z-50 transition-all duration-500">
-        <div className="p-6 flex items-center gap-3">
-          <div className="relative group cursor-pointer" onClick={() => setView('chat')}>
-            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl blur opacity-60 group-hover:opacity-100 transition duration-500"></div>
-            <div className="relative bg-black rounded-xl p-2.5">
-              <Cpu className="text-white w-6 h-6 animate-pulse" />
-            </div>
-          </div>
-          <div className="hidden lg:block overflow-hidden">
-            <h1 className="text-lg font-black tracking-tighter leading-none">FUSIONSEEK</h1>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Intelligence Proxy</p>
-          </div>
-        </div>
-
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          {[
-            { id: 'chat', label: 'Search Interface', icon: Search, desc: 'Natural Language' },
-            { id: 'vault', label: 'Multimodal Vault', icon: Database, desc: 'Local Indices' },
-            { id: 'blockchain', label: 'Chain Ledger', icon: Network, desc: 'Provenance' },
-            { id: 'history', label: 'Activity Logs', icon: History, desc: 'Past Searches' },
-            { id: 'analytics', label: 'Dashboard', icon: BarChart3, desc: 'Insights' },
-            { id: 'settings', label: 'Configuration', icon: Settings, desc: 'System' }
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setView(item.id as ViewType)}
-              className={`w-full group relative flex items-center gap-4 p-3.5 rounded-2xl transition-all duration-300 ${view === item.id
-                ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.3)]'
-                : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
-                }`}
-            >
-              <item.icon size={22} className={view === item.id ? 'animate-float' : ''} />
-              <div className="hidden lg:block text-left">
-                <div className="text-sm font-bold tracking-tight">{item.label}</div>
-                <div className="text-[9px] font-medium uppercase tracking-wider opacity-60">{item.desc}</div>
-              </div>
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-6 space-y-6">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={stats.isIndexing}
-            className="w-full bg-white text-slate-950 p-4 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 transition-all flex items-center justify-center gap-2 group"
-          >
-            {stats.isIndexing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-            <span className="hidden lg:inline">{stats.isIndexing ? 'Ingesting...' : 'Ingest Data'}</span>
-          </button>
-          <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-        </div>
-      </aside>
+      <Sidebar
+        theme={theme}
+        view={view}
+        setView={setView}
+        isIndexing={stats.isIndexing}
+        fileInputRef={fileInputRef}
+        handleFileUpload={handleFileUpload}
+      />
 
       {/* Main Display Panel */}
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {/* Top Activity Bar */}
-        <header className="h-16 flex items-center justify-between px-8 border-b border-white/5 glass z-40">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-emerald-400">
-              <div className={`w-2 h-2 rounded-full ${stats.isIndexing ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse shadow-[0_0_10px_#10b981]`}></div>
-              <span className="text-[11px] font-black uppercase tracking-widest">{stats.isIndexing ? 'Ingesting Nodes' : 'Nodes Online'}</span>
-            </div>
-            <div className="h-4 w-px bg-white/10"></div>
-            <div className="flex items-center gap-3 text-slate-500 text-[11px] font-bold">
-              <Server size={14} />
-              <span className="mono">0x{Math.random().toString(16).substr(2, 6).toUpperCase()}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button onClick={() => setView('history')} className={`p-2.5 rounded-xl transition-colors ${view === 'history' ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-slate-500'}`}>
-              <Clock size={18} />
-            </button>
-            <button onClick={() => setView('analytics')} className={`p-2.5 rounded-xl transition-colors ${view === 'analytics' ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-slate-500'}`}>
-              <BarChart3 size={18} />
-            </button>
-            <button onClick={() => setView('settings')} className={`p-2.5 rounded-xl transition-colors ${view === 'settings' ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-slate-500'}`}>
-              <Settings size={18} />
-            </button>
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white text-xs shadow-lg">FS</div>
-          </div>
-        </header>
+        <Header
+          theme={theme}
+          setTheme={setTheme}
+          view={view}
+          setView={setView}
+          isIndexing={stats.isIndexing}
+          setShowDinoGame={setShowDinoGame}
+        />
 
         {/* Dynamic Content Views */}
         <div className="flex-1 overflow-hidden flex flex-col relative">
@@ -353,13 +306,18 @@ export default function App() {
           {/* Chat Interface */}
           {view === 'chat' && (
             <>
-              <div className="flex-1 overflow-y-auto p-8 space-y-10 scroll-smooth">
+              {/* Dynamic Chat Background */}
+              <BackgroundAnimations theme={theme} />
+
+              <div className="relative z-10 flex-1 overflow-y-auto p-8 space-y-10 scroll-smooth">
                 {chatHistory.map((msg, idx) => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
                     <div className={`max-w-4xl relative group ${msg.role === 'user' ? 'w-auto' : 'w-full'}`}>
                       <div className={`rounded-3xl p-8 ${msg.role === 'user'
-                        ? 'bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-2xl'
-                        : 'glass text-slate-200 shadow-xl border-white/5'
+                        ? 'bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-2xl hover:scale-[1.01] transition-all'
+                        : theme === 'dark'
+                          ? 'glass text-slate-200 shadow-xl border-white/5 hover:border-indigo-500/30 transition-all'
+                          : 'bg-white text-slate-700 shadow-xl border border-slate-200 hover:border-indigo-500/30 transition-all'
                         }`}>
                         <div className="flex items-center gap-3 mb-4 border-b border-white/10 pb-3">
                           <div className={`p-1.5 rounded-lg ${msg.role === 'user' ? 'bg-white/20' : 'bg-indigo-500/20 text-indigo-400'}`}>
@@ -377,9 +335,15 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                        <div className={`leading-[1.6] opacity-95 whitespace-pre-wrap ${msg.role === 'assistant' ? 'text-xl font-semibold tracking-tight text-white' : 'text-lg font-medium'
+                        <div className={`leading-[1.6] opacity-95 whitespace-pre-wrap ${msg.role === 'assistant'
+                          ? theme === 'dark' ? 'text-xl font-semibold tracking-tight text-white' : 'text-xl font-semibold tracking-tight text-slate-800'
+                          : 'text-lg font-medium'
                           }`}>
-                          {msg.text}
+                          {msg.role === 'assistant' ? (
+                            <Typewriter text={msg.text} speed={5} />
+                          ) : (
+                            msg.text
+                          )}
                         </div>
                       </div>
                     </div>
@@ -404,11 +368,13 @@ export default function App() {
                 <div ref={chatEndRef} />
               </div>
 
-              <div className="p-8 glass border-t border-white/5">
+              <div className={`relative z-10 p-8 border-t transition-all duration-300 ${theme === 'dark' ? 'glass border-white/5' : 'bg-white border-slate-200'
+                }`}>
                 <div className="max-w-5xl mx-auto">
                   <div className="relative group">
                     <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-blue-600 blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
-                    <div className="relative flex items-center bg-[#0f172a] border border-white/10 rounded-3xl p-3 shadow-2xl focus-within:border-indigo-500/50 transition-all">
+                    <div className={`relative flex items-center border rounded-3xl p-3 shadow-2xl focus-within:border-indigo-500/50 transition-all ${theme === 'dark' ? 'bg-[#0f172a] border-white/10' : 'bg-white border-slate-200'
+                      }`}>
                       <div className="p-4 text-slate-500"><Search size={22} /></div>
                       <input
                         type="text"
@@ -416,7 +382,8 @@ export default function App() {
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         placeholder="Search Multimodal Context..."
-                        className="flex-1 bg-transparent border-none outline-none text-white text-base py-3 px-2 font-medium"
+                        className={`flex-1 bg-transparent border-none outline-none text-base py-3 px-2 font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'
+                          }`}
                       />
                       <button onClick={handleSearch} className="bg-white hover:bg-slate-100 text-slate-950 p-4 rounded-2xl transition-all shadow-xl hover:scale-105 active:scale-95">
                         <ArrowRight size={22} />
@@ -777,6 +744,9 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Profile View */}
+          {view === 'profile' && <ProfileView theme={theme} />}
 
           {/* Settings Subpage */}
           {view === 'settings' && (
