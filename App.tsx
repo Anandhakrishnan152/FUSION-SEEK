@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   FileText,
@@ -50,13 +49,27 @@ import {
   CreditCard
 } from 'lucide-react';
 import { FileMetadata, BlockchainRecord, ChatMessage, Modality, ViewType } from './types';
-import { performMultimodalRAG, verifyHash, findSimilarImages, processAndIndexFile } from './services/ollamaService';
+import { performMultimodalRAG, findSimilarImages, processAndIndexFile } from './services/NLPService';
+import { blockchainService } from './services/BlockchainService';
+import { voiceService } from './services/VoiceService';
 import { DinoGame } from './components/DinoGame';
 import { Typewriter } from './components/Typewriter';
 import { BackgroundAnimations } from './components/BackgroundAnimations';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { ProfileView } from './components/ProfileView';
+import mammoth from 'mammoth';
+
+const WELCOME_MESSAGES = [
+  "Hey, User! Welcome to Fusion Seek, where your search for answers just got easier. What can I help you with today?",
+  "Hi User! 👋 It’s great to have you at Fusion Seek. I am Fusion, your personal guide to our intelligence nodes. Ready to explore?",
+  "Yo, User! 🎉 Welcome to Fusion Seek. Kick back, relax, and let me know if you need help finding something awesome!",
+  "Woohoo, you're here! 🎉 I'm Fusion, your friendly assistant at Fusion Seek. How can I make today amazing for you?",
+  "Hi there, User! 👋 Let's make this easy. Need help with something specific? Or want me to show you around?",
+  "Hey User, what brings you here today? Whether you're searching for something or just exploring, I’m here to help. Let's dive in!",
+  "Looking for something in particular? I’m Fusion, and I’m here to guide you. Don’t hesitate, let’s make discovery fun!",
+  "Welcome, User! I can see you're browsing. Need some suggestions or just want to chat about what’s indexed? Ask away!"
+];
 
 export default function App() {
   const [files, setFiles] = useState<FileMetadata[]>([]);
@@ -66,7 +79,7 @@ export default function App() {
     {
       id: 'welcome',
       role: 'assistant',
-      text: "System Initialized. Standard Protocol Active.\n\nRunning in lightweight mode without local LLM inference.\n\nI am ready for synchronization.",
+      text: WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)],
       verificationDetails: { filesChecked: 0, discrepancies: 0, blockchainStatus: 'SECURE' }
     }
   ]);
@@ -87,6 +100,15 @@ export default function App() {
   const [showNeuralShimmer, setShowNeuralShimmer] = useState(true);
   const [showDinoGame, setShowDinoGame] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  // Voice State
+  const [voiceMode, setVoiceMode] = useState(false);
+
+  // Voice Service Effect
+  useEffect(() => {
+    voiceService.setEnabled(voiceMode);
+    if (!voiceMode) voiceService.stop();
+  }, [voiceMode]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -125,7 +147,8 @@ export default function App() {
       let modality: Modality = 'text';
       if (file.type.includes('image')) modality = 'image';
       else if (file.type.includes('audio')) modality = 'audio';
-      else if (file.type.includes('pdf')) modality = 'pdf';
+      else if (file.name.match(/\.docx$/i)) modality = 'text'; // DOCX is text-extractable
+      else if (file.type.includes('pdf') || file.name.match(/\.(pptx|xlsx)$/i)) modality = 'pdf'; // Other office docs binary
 
       return {
         id: `temp-${Date.now()}-${i}`,
@@ -150,17 +173,29 @@ export default function App() {
 
       try {
         await new Promise(r => setTimeout(r, 800));
-        const hash = await verifyHash(file);
+        const hash = await blockchainService.verifyHash(file);
         const blockchainId = `FS-NODE-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
 
         let modality: Modality = 'text';
         if (file.type.includes('image')) modality = 'image';
         else if (file.type.includes('audio')) modality = 'audio';
-        else if (file.type.includes('pdf')) modality = 'pdf';
+        else if (file.name.match(/\.docx$/i)) modality = 'text';
+        else if (file.type.includes('pdf') || file.name.match(/\.(pptx|xlsx)$/i)) modality = 'pdf';
 
         let content = '';
         if (modality === 'text') {
-          content = await file.text();
+          if (file.name.match(/\.docx$/i)) {
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const result = await mammoth.extractRawText({ arrayBuffer });
+              content = result.value;
+            } catch (err) {
+              console.error("Failed to parse DOCX:", err);
+              content = "Error: Could not extract text from document.";
+            }
+          } else {
+            content = await file.text();
+          }
         } else {
           content = await new Promise((resolve) => {
             const reader = new FileReader();
@@ -190,13 +225,10 @@ export default function App() {
 
         setFiles(prev => prev.map(f => f.id === placeholderId ? finalMeta : f));
 
-        setBlockchainLogs(prev => [{
-          timestamp: Date.now(),
-          fileHash: hash,
-          documentId: blockchainId,
-          action: 'REGISTRATION',
-          verified: true
-        }, ...prev]);
+        // --- BLOCKCHAIN REGISTRATION ---
+        // Add to the cryptographic hash chain
+        const newBlock = await blockchainService.addBlock(hash, blockchainId, 'REGISTRATION');
+        setBlockchainLogs(prev => [newBlock, ...prev]);
 
       } catch (err) {
         console.error("Ingestion failed", err);
@@ -223,6 +255,11 @@ export default function App() {
     setSearchStage('SYNTHESIZING');
 
     const response = await performMultimodalRAG(searchQuery, files.filter(f => f.status === 'ready'));
+
+    // Trigger Voice Response if enabled
+    if (voiceMode) {
+      voiceService.speak(response);
+    }
 
     const assistantMsg: ChatMessage = {
       id: (Date.now() + 1).toString(),
@@ -298,6 +335,8 @@ export default function App() {
           setView={setView}
           isIndexing={stats.isIndexing}
           setShowDinoGame={setShowDinoGame}
+          voiceMode={voiceMode}
+          setVoiceMode={setVoiceMode}
         />
 
         {/* Dynamic Content Views */}
@@ -309,11 +348,11 @@ export default function App() {
               {/* Dynamic Chat Background */}
               <BackgroundAnimations theme={theme} />
 
-              <div className="relative z-10 flex-1 overflow-y-auto p-8 space-y-10 scroll-smooth">
+              <div className="relative z-10 flex-1 overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-10 scroll-smooth">
                 {chatHistory.map((msg, idx) => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-                    <div className={`max-w-4xl relative group ${msg.role === 'user' ? 'w-auto' : 'w-full'}`}>
-                      <div className={`rounded-3xl p-8 ${msg.role === 'user'
+                    <div className={`max-w-full md:max-w-4xl relative group ${msg.role === 'user' ? 'w-auto max-w-[90%]' : 'w-full'}`}>
+                      <div className={`rounded-2xl md:rounded-3xl p-5 md:p-8 ${msg.role === 'user'
                         ? 'bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-2xl hover:scale-[1.01] transition-all'
                         : theme === 'dark'
                           ? 'glass text-slate-200 shadow-xl border-white/5 hover:border-indigo-500/30 transition-all'
@@ -323,24 +362,32 @@ export default function App() {
                           <div className={`p-1.5 rounded-lg ${msg.role === 'user' ? 'bg-white/20' : 'bg-indigo-500/20 text-indigo-400'}`}>
                             {msg.role === 'user' ? <Terminal size={14} /> : <Activity size={14} />}
                           </div>
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
+                          <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
                             {msg.role === 'user' ? 'Local Proxy Query' : 'Multimodal Synthesis'}
                           </span>
                           {msg.role === 'assistant' && msg.verificationDetails && (
                             <div className="ml-auto flex gap-3">
                               <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20">
                                 <ShieldCheck size={12} />
-                                <span className="text-[10px] font-black tracking-widest">{msg.verificationDetails.blockchainStatus}</span>
+                                <span className="text-[9px] md:text-[10px] font-black tracking-widest hidden sm:inline">{msg.verificationDetails.blockchainStatus}</span>
                               </div>
                             </div>
                           )}
                         </div>
-                        <div className={`leading-[1.6] opacity-95 whitespace-pre-wrap ${msg.role === 'assistant'
-                          ? theme === 'dark' ? 'text-xl font-semibold tracking-tight text-white' : 'text-xl font-semibold tracking-tight text-slate-800'
-                          : 'text-lg font-medium'
-                          }`}>
+                        <div
+                          onClick={() => voiceMode && voiceService.speak(msg.text)}
+                          className={`leading-[1.6] opacity-95 whitespace-pre-wrap break-words ${voiceMode ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''} ${msg.role === 'assistant'
+                            ? theme === 'dark' ? 'text-base md:text-xl font-semibold tracking-tight text-white' : 'text-base md:text-xl font-semibold tracking-tight text-slate-800'
+                            : 'text-sm md:text-lg font-medium'
+                            }`}
+                          title={voiceMode ? "Click to read aloud" : undefined}
+                        >
                           {msg.role === 'assistant' ? (
-                            <Typewriter text={msg.text} speed={5} />
+                            idx === chatHistory.length - 1 ? (
+                              <Typewriter text={msg.text} speed={5} />
+                            ) : (
+                              msg.text
+                            )
                           ) : (
                             msg.text
                           )}
@@ -351,10 +398,10 @@ export default function App() {
                 ))}
                 {searchStage !== 'IDLE' && (
                   <div className="flex justify-start animate-slide-up">
-                    <div className="glass rounded-[2.5rem] p-8 flex flex-col gap-6 min-w-[400px] shadow-2xl relative overflow-hidden">
+                    <div className="glass rounded-[2.5rem] p-6 md:p-8 flex flex-col gap-6 min-w-full md:min-w-[400px] shadow-2xl relative overflow-hidden">
                       <div className="absolute inset-0 scan-line"></div>
-                      <div className="flex items-center gap-5 relative z-10">
-                        <div className="w-12 h-12 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin flex items-center justify-center">
+                      <div className="flex items-center gap-5 relative z-10 block">
+                        <div className="w-12 h-12 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin flex items-center justify-center shrink-0">
                           <Activity className="text-indigo-400" size={18} />
                         </div>
                         <div>
@@ -368,24 +415,24 @@ export default function App() {
                 <div ref={chatEndRef} />
               </div>
 
-              <div className={`relative z-10 p-8 border-t transition-all duration-300 ${theme === 'dark' ? 'glass border-white/5' : 'bg-white border-slate-200'
+              <div className={`relative z-10 p-4 md:p-8 border-t transition-all duration-300 ${theme === 'dark' ? 'glass border-white/5' : 'bg-white border-slate-200'
                 }`}>
                 <div className="max-w-5xl mx-auto">
                   <div className="relative group">
                     <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-blue-600 blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
-                    <div className={`relative flex items-center border rounded-3xl p-3 shadow-2xl focus-within:border-indigo-500/50 transition-all ${theme === 'dark' ? 'bg-[#0f172a] border-white/10' : 'bg-white border-slate-200'
+                    <div className={`relative flex items-center border rounded-3xl p-2 md:p-3 shadow-2xl focus-within:border-indigo-500/50 transition-all ${theme === 'dark' ? 'bg-[#0f172a] border-white/10' : 'bg-white border-slate-200'
                       }`}>
-                      <div className="p-4 text-slate-500"><Search size={22} /></div>
+                      <div className="p-3 md:p-4 text-slate-500"><Search size={22} /></div>
                       <input
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         placeholder="Search Multimodal Context..."
-                        className={`flex-1 bg-transparent border-none outline-none text-base py-3 px-2 font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'
+                        className={`flex-1 bg-transparent border-none outline-none text-sm md:text-base py-3 px-2 font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'
                           }`}
                       />
-                      <button onClick={handleSearch} className="bg-white hover:bg-slate-100 text-slate-950 p-4 rounded-2xl transition-all shadow-xl hover:scale-105 active:scale-95">
+                      <button onClick={handleSearch} className="bg-white hover:bg-slate-100 text-slate-950 p-3 md:p-4 rounded-2xl transition-all shadow-xl hover:scale-105 active:scale-95 shrink-0">
                         <ArrowRight size={22} />
                       </button>
                     </div>
@@ -397,33 +444,33 @@ export default function App() {
 
           {/* History Subpage */}
           {view === 'history' && (
-            <div className="flex-1 overflow-y-auto p-12 animate-slide-up">
+            <div className="flex-1 overflow-y-auto p-4 md:p-12 animate-slide-up">
               <div className="max-w-6xl mx-auto">
-                <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-16 gap-8">
+                <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-8 md:mb-16 gap-6 md:gap-8">
                   <div>
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-12 h-[1px] bg-indigo-500"></div>
-                      <span className="text-[11px] font-black text-indigo-400 uppercase tracking-[0.3em]">Temporal Logs</span>
+                      <div className="w-8 md:w-12 h-[1px] bg-indigo-500"></div>
+                      <span className="text-[10px] md:text-[11px] font-black text-indigo-400 uppercase tracking-[0.3em]">Temporal Logs</span>
                     </div>
-                    <h2 className="text-5xl font-black text-white italic tracking-tighter uppercase">Activity Logs</h2>
+                    <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Activity Logs</h2>
                   </div>
                   <button
                     onClick={clearHistory}
-                    className="bg-rose-500/10 border border-rose-500/20 text-rose-500 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all flex items-center gap-2 shadow-2xl shadow-rose-500/10"
+                    className="w-full md:w-auto bg-rose-500/10 border border-rose-500/20 text-rose-500 px-6 md:px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center gap-2 shadow-2xl shadow-rose-500/10"
                   >
                     <Trash2 size={16} /> Purge All History
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-12">
                   {/* Left Column: Recent Queries Recall */}
-                  <div className="lg:col-span-1 space-y-8">
-                    <div className="flex items-center gap-3 mb-6">
+                  <div className="lg:col-span-1 space-y-6 md:space-y-8">
+                    <div className="flex items-center gap-3 mb-4 md:mb-6">
                       <Zap size={20} className="text-amber-400" />
-                      <h3 className="text-xl font-black text-white uppercase italic">Quick Recall</h3>
+                      <h3 className="text-lg md:text-xl font-black text-white uppercase italic">Quick Recall</h3>
                     </div>
                     {recentQueries.length === 0 ? (
-                      <div className="glass p-10 rounded-3xl border-dashed border-white/10 text-center opacity-40">
+                      <div className="glass p-6 md:p-10 rounded-3xl border-dashed border-white/10 text-center opacity-40">
                         <Search size={32} className="mx-auto mb-4" />
                         <p className="text-[10px] font-bold uppercase tracking-widest">No Recent Searches</p>
                       </div>
@@ -433,12 +480,12 @@ export default function App() {
                           <div key={i} className="group relative glass p-5 rounded-3xl border-white/5 hover:border-indigo-500/40 transition-all flex items-center justify-between shadow-xl">
                             <button
                               onClick={() => executeSearch(q)}
-                              className="flex-1 text-left mr-4"
+                              className="flex-1 text-left mr-4 overflow-hidden"
                             >
                               <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Query {i + 1}</div>
-                              <div className="text-sm font-bold text-white truncate max-w-[200px]">{q}</div>
+                              <div className="text-sm font-bold text-white truncate w-full">{q}</div>
                             </button>
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => executeSearch(q)}
                                 className="p-2 bg-indigo-500 text-white rounded-xl shadow-lg"
@@ -461,34 +508,34 @@ export default function App() {
                   </div>
 
                   {/* Right Column: Full Conversation Timeline */}
-                  <div className="lg:col-span-2 space-y-8">
-                    <div className="flex items-center gap-3 mb-6">
+                  <div className="lg:col-span-2 space-y-6 md:space-y-8">
+                    <div className="flex items-center gap-3 mb-4 md:mb-6">
                       <MessageSquare size={20} className="text-indigo-400" />
-                      <h3 className="text-xl font-black text-white uppercase italic">Neural Activity Timeline</h3>
+                      <h3 className="text-lg md:text-xl font-black text-white uppercase italic">Neural Activity Timeline</h3>
                     </div>
 
-                    <div className="relative pl-8 border-l border-white/5 space-y-12">
+                    <div className="relative pl-4 md:pl-8 border-l border-white/5 space-y-8 md:space-y-12">
                       {chatHistory.slice(1).length === 0 ? (
-                        <div className="glass p-20 rounded-[3rem] text-center border-white/5 opacity-40">
+                        <div className="glass p-12 md:p-20 rounded-[3rem] text-center border-white/5 opacity-40">
                           <Calendar size={48} className="mx-auto mb-6" />
-                          <h4 className="text-lg font-black text-white uppercase italic mb-2">No Session Activity</h4>
+                          <h4 className="text-base md:text-lg font-black text-white uppercase italic mb-2">No Session Activity</h4>
                           <p className="text-[10px] font-bold uppercase tracking-widest">Active nodes awaiting user prompt injection.</p>
                         </div>
                       ) : (
                         chatHistory.slice(1).map((msg, i) => (
                           <div key={msg.id} className="relative group">
                             {/* Timeline Node */}
-                            <div className={`absolute -left-[45px] top-4 w-4 h-4 rounded-full border-2 bg-[#020617] transition-all group-hover:scale-125 ${msg.role === 'user' ? 'border-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]'}`}></div>
+                            <div className={`absolute -left-[23px] md:-left-[45px] top-4 w-3 h-3 md:w-4 md:h-4 rounded-full border-2 bg-[#020617] transition-all group-hover:scale-125 ${msg.role === 'user' ? 'border-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]'}`}></div>
 
-                            <div className="glass p-8 rounded-[2.5rem] border-white/5 hover:border-white/10 transition-all shadow-2xl relative overflow-hidden">
+                            <div className="glass p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-white/5 hover:border-white/10 transition-all shadow-2xl relative overflow-hidden">
                               <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-4">
-                                <div className="flex items-center gap-3">
-                                  <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${msg.role === 'user' ? 'bg-indigo-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
+                                <div className="flex items-center gap-2 md:gap-3">
+                                  <span className={`text-[9px] md:text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${msg.role === 'user' ? 'bg-indigo-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
                                     {msg.role}
                                   </span>
-                                  <span className="text-[10px] font-black text-slate-500 mono uppercase tracking-widest">Node ID: {msg.id.slice(-6)}</span>
+                                  <span className="text-[9px] md:text-[10px] font-black text-slate-500 mono uppercase tracking-widest hidden sm:inline">Node ID: {msg.id.slice(-6)}</span>
                                 </div>
-                                <div className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+                                <div className="text-[9px] md:text-[10px] font-bold text-slate-600 uppercase tracking-widest">
                                   Proxy Response :: Secure
                                 </div>
                               </div>
@@ -516,18 +563,18 @@ export default function App() {
 
           {/* Data Vault Interface */}
           {view === 'vault' && (
-            <div className="flex-1 overflow-y-auto p-12 animate-slide-up">
+            <div className="flex-1 overflow-y-auto p-4 md:p-12 animate-slide-up">
               <div className="max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row items-end justify-between mb-16 gap-8">
-                  <div className="flex-1">
+                <div className="flex flex-col md:flex-row items-end justify-between mb-8 md:mb-16 gap-6 md:gap-8">
+                  <div className="flex-1 w-full">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-12 h-[1px] bg-indigo-500"></div>
-                      <span className="text-[11px] font-black text-indigo-400 uppercase tracking-[0.3em]">Neural Repository</span>
+                      <div className="w-8 md:w-12 h-[1px] bg-indigo-500"></div>
+                      <span className="text-[10px] md:text-[11px] font-black text-indigo-400 uppercase tracking-[0.3em]">Neural Repository</span>
                     </div>
-                    <h2 className="text-5xl font-black text-white italic tracking-tighter uppercase">Data Vault</h2>
+                    <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Data Vault</h2>
                   </div>
 
-                  <div className="flex flex-wrap gap-4 glass p-4 rounded-3xl border-white/5 shadow-2xl w-full md:w-auto">
+                  <div className="flex flex-col md:flex-row gap-4 glass p-4 rounded-3xl border-white/5 shadow-2xl w-full md:w-auto">
                     <div className="relative flex-1 md:w-64">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                       <input
@@ -541,7 +588,7 @@ export default function App() {
                     <select
                       value={modalityFilter}
                       onChange={(e) => setModalityFilter(e.target.value as any)}
-                      className="bg-black/40 border border-white/10 rounded-2xl px-4 py-2.5 text-xs font-bold focus:outline-none"
+                      className="bg-black/40 border border-white/10 rounded-2xl px-4 py-2.5 text-xs font-bold focus:outline-none text-slate-400"
                     >
                       <option value="all">All Modalities</option>
                       <option value="text">Documents</option>
@@ -553,7 +600,7 @@ export default function App() {
                 </div>
 
                 {filteredFiles.length === 0 ? (
-                  <div className="bg-white/[0.02] border-2 border-dashed border-white/10 rounded-[4rem] p-32 text-center group">
+                  <div className="bg-white/[0.02] border-2 border-dashed border-white/10 rounded-[2rem] md:rounded-[4rem] p-16 md:p-32 text-center group">
                     <div className="bg-indigo-500/10 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8">
                       <HardDrive className="text-indigo-400" size={40} />
                     </div>
@@ -561,9 +608,9 @@ export default function App() {
                     <p className="text-slate-500 text-sm max-w-sm mx-auto mb-10 uppercase tracking-[0.2em] font-bold">No active vectors found in the current partition.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
                     {filteredFiles.map((file, i) => (
-                      <div key={file.id} className="group relative glass rounded-[2.5rem] p-8 transition-all duration-500 animate-slide-up overflow-hidden hover:border-indigo-500/40">
+                      <div key={file.id} className="group relative glass rounded-[2.5rem] p-6 md:p-8 transition-all duration-500 animate-slide-up overflow-hidden hover:border-indigo-500/40">
                         <div className="flex items-start justify-between mb-8">
                           <div className={`p-4 rounded-2xl shadow-lg ${file.status === 'indexing' ? 'bg-amber-500/10 text-amber-500 animate-pulse' :
                             file.modality === 'image' ? 'bg-rose-500/10 text-rose-400' :
@@ -593,30 +640,30 @@ export default function App() {
 
           {/* Blockchain Ledger View */}
           {view === 'blockchain' && (
-            <div className="flex-1 overflow-y-auto p-12 animate-slide-up">
-              <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-12">
+            <div className="flex-1 overflow-y-auto p-4 md:p-12 animate-slide-up">
+              <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-8 md:gap-12">
                 <div className="flex-1">
-                  <div className="flex items-center gap-8 mb-20">
+                  <div className="flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-8 mb-12 md:mb-20">
                     <div className="bg-emerald-500 p-6 rounded-[2rem] shadow-[0_0_40px_rgba(16,185,129,0.3)] text-white">
                       <ShieldCheck size={44} className="animate-float" />
                     </div>
                     <div>
-                      <h2 className="text-5xl font-black text-white italic tracking-tighter uppercase">Chain Ledger</h2>
-                      <p className="text-slate-500 text-[11px] uppercase font-bold tracking-[0.4em] mt-2">Active Provenance Nodes: {Math.floor(Math.random() * 20) + 5}</p>
+                      <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Chain Ledger</h2>
+                      <p className="text-slate-500 text-[10px] md:text-[11px] uppercase font-bold tracking-[0.4em] mt-2">Active Provenance Nodes: {Math.floor(Math.random() * 20) + 5}</p>
                     </div>
                   </div>
-                  <div className="space-y-6">
+                  <div className="space-y-4 md:space-y-6">
                     {blockchainLogs.map((log, i) => (
-                      <div key={i} className="flex gap-8 group animate-slide-up">
-                        <div className="w-12 h-12 rounded-2xl flex-shrink-0 flex items-center justify-center z-10 border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                      <div key={i} className="flex gap-4 md:gap-8 group animate-slide-up">
+                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl flex-shrink-0 flex items-center justify-center z-10 border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
                           <Hash size={20} />
                         </div>
-                        <div className="flex-1 glass p-6 rounded-3xl border-white/5 hover:border-emerald-500/40 transition-all">
+                        <div className="flex-1 glass p-4 md:p-6 rounded-3xl border-white/5 hover:border-emerald-500/40 transition-all overflow-hidden">
                           <div className="flex justify-between items-center mb-4">
-                            <span className="text-[10px] font-black px-3 py-1 bg-emerald-500 text-slate-950 rounded-full uppercase">{log.action}</span>
-                            <span className="text-[11px] font-black mono text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                            <span className="text-[9px] md:text-[10px] font-black px-3 py-1 bg-emerald-500 text-slate-950 rounded-full uppercase">{log.action}</span>
+                            <span className="text-[10px] md:text-[11px] font-black mono text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
                           </div>
-                          <div className="text-sm font-bold text-white mb-2">{log.documentId}</div>
+                          <div className="text-sm font-bold text-white mb-2 truncate">{log.documentId}</div>
                           <div className="text-[10px] mono text-slate-500 truncate">{log.fileHash}</div>
                         </div>
                       </div>
@@ -663,56 +710,56 @@ export default function App() {
 
           {/* Analytics Subpage */}
           {view === 'analytics' && (
-            <div className="flex-1 overflow-y-auto p-12 animate-slide-up">
+            <div className="flex-1 overflow-y-auto p-4 md:p-12 animate-slide-up">
               <div className="max-w-6xl mx-auto">
-                <div className="flex items-center gap-6 mb-16">
+                <div className="flex items-center gap-6 mb-8 md:mb-16">
                   <div className="bg-rose-500 p-6 rounded-[2rem] text-white shadow-2xl">
                     <PieChart size={40} />
                   </div>
                   <div>
-                    <h2 className="text-5xl font-black text-white italic uppercase tracking-tighter">Insights</h2>
-                    <p className="text-slate-500 text-[11px] font-black uppercase tracking-[0.4em]">Node Intelligence & Performance Dashboard</p>
+                    <h2 className={`text-3xl md:text-5xl font-black italic uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Insights</h2>
+                    <p className="text-slate-500 text-[10px] md:text-[11px] font-black uppercase tracking-[0.4em]">Node Intelligence & Performance Dashboard</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-                  <div className="glass p-10 rounded-[3rem] border-white/10 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 mb-12">
+                  <div className="glass p-8 md:p-10 rounded-[3rem] border-white/10 space-y-6">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Storage Partition</span>
+                      <span className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Storage Partition</span>
                       <HardDrive size={20} className="text-indigo-400" />
                     </div>
-                    <div className="text-4xl font-black text-white mono">{(stats.totalSize / (1024 * 1024)).toFixed(2)} MB</div>
+                    <div className="text-3xl md:text-4xl font-black text-white mono">{(stats.totalSize / (1024 * 1024)).toFixed(2)} MB</div>
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                       <div className="h-full bg-indigo-500" style={{ width: '15%' }}></div>
                     </div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">15% of reserved local block utilized</p>
+                    <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase">15% of reserved local block utilized</p>
                   </div>
-                  <div className="glass p-10 rounded-[3rem] border-white/10 space-y-6">
+                  <div className="glass p-8 md:p-10 rounded-[3rem] border-white/10 space-y-6">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Average Trust</span>
+                      <span className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Average Trust</span>
                       <ShieldCheck size={20} className="text-emerald-400" />
                     </div>
-                    <div className="text-4xl font-black text-white mono">{stats.avgTrust.toFixed(1)}%</div>
+                    <div className="text-3xl md:text-4xl font-black text-white mono">{stats.avgTrust.toFixed(1)}%</div>
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                       <div className="h-full bg-emerald-500" style={{ width: `${stats.avgTrust}%` }}></div>
                     </div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Immutable cryptographic verification active</p>
+                    <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase">Immutable cryptographic verification active</p>
                   </div>
-                  <div className="glass p-10 rounded-[3rem] border-white/10 space-y-6">
+                  <div className="glass p-8 md:p-10 rounded-[3rem] border-white/10 space-y-6">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Semantic Density</span>
+                      <span className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Semantic Density</span>
                       <Zap size={20} className="text-amber-400" />
                     </div>
-                    <div className="text-4xl font-black text-white mono">{files.filter(f => f.status === 'ready').length * 12}K</div>
+                    <div className="text-3xl md:text-4xl font-black text-white mono">{files.filter(f => f.status === 'ready').length * 12}K</div>
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                       <div className="h-full bg-amber-500" style={{ width: '45%' }}></div>
                     </div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Multidimensional vector embedding space</p>
+                    <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase">Multidimensional vector embedding space</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div className="glass p-10 rounded-[4rem] border-white/5">
+                  <div className="glass p-8 md:p-10 rounded-[3rem] md:rounded-[4rem] border-white/5">
                     <h4 className="text-xl font-black text-white mb-8 uppercase italic">Modality Distribution</h4>
                     <div className="space-y-6">
                       {[
@@ -729,7 +776,7 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-                  <div className="glass p-10 rounded-[4rem] border-white/5 flex flex-col justify-center items-center text-center">
+                  <div className="glass p-8 md:p-10 rounded-[3rem] md:rounded-[4rem] border-white/5 flex flex-col justify-center items-center text-center">
                     <CpuIcon size={48} className="text-indigo-400 mb-6 animate-pulse" />
                     <h4 className="text-xl font-black text-white mb-4 uppercase italic">Inference Engine Health</h4>
                     <div className="flex gap-4 mb-6">
@@ -750,20 +797,20 @@ export default function App() {
 
           {/* Settings Subpage */}
           {view === 'settings' && (
-            <div className="flex-1 overflow-y-auto p-12 animate-slide-up">
+            <div className="flex-1 overflow-y-auto p-4 md:p-12 animate-slide-up">
               <div className="max-w-4xl mx-auto">
-                <div className="flex items-center gap-6 mb-16">
+                <div className="flex items-center gap-6 mb-8 md:mb-16">
                   <div className="bg-slate-700 p-6 rounded-[2rem] text-white">
                     <Settings size={40} />
                   </div>
                   <div>
-                    <h2 className="text-5xl font-black text-white italic uppercase tracking-tighter">Config</h2>
-                    <p className="text-slate-500 text-[11px] font-black uppercase tracking-[0.4em]">Intelligence & Security Preferences</p>
+                    <h2 className={`text-3xl md:text-5xl font-black italic uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Config</h2>
+                    <p className="text-slate-500 text-[10px] md:text-[11px] font-black uppercase tracking-[0.4em]">Intelligence & Security Preferences</p>
                   </div>
                 </div>
 
-                <div className="space-y-12">
-                  <section className="glass p-10 rounded-[4rem] border-white/5">
+                <div className="space-y-8 md:space-y-12">
+                  <section className="glass p-8 md:p-10 rounded-[4rem] border-white/5">
                     <div className="flex items-center gap-4 mb-10">
                       <Activity size={24} className="text-indigo-400" />
                       <h3 className="text-xl font-black text-white uppercase italic">Intelligence Model</h3>
@@ -834,23 +881,25 @@ export default function App() {
         </div>
       </main>
 
-      {/* Persistent Status Bar */}
-      <footer className="fixed bottom-0 left-0 right-0 h-10 glass border-t border-white/5 px-8 flex items-center justify-between z-[100]">
-        <div className="flex gap-10">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_15px_#6366f1] animate-pulse"></div>
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Neural Engine v4.2 :: SYNCED</span>
+      {/* Persistent Status Bar - Hidden in Chat View */}
+      {view !== 'chat' && (
+        <footer className="fixed bottom-0 left-0 right-0 h-10 glass border-t border-white/5 px-4 md:px-8 flex items-center justify-between z-[100]">
+          <div className="flex gap-4 md:gap-10">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_15px_#6366f1] animate-pulse"></div>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] truncate">Neural Engine v4.2 :: SYNCED</span>
+            </div>
+            <div className="hidden md:flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_15px_#10b981]"></div>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Provenance Ledger :: {securityLevel.toUpperCase()}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_15px_#10b981]"></div>
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Provenance Ledger :: {securityLevel.toUpperCase()}</span>
+          <div className="hidden sm:flex items-center gap-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] italic">
+            <ShieldCheck size={12} className="text-emerald-500/40" />
+            <span className="opacity-40">Zero-Trust Environment • No Exfiltration Detected</span>
           </div>
-        </div>
-        <div className="flex items-center gap-4 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] italic">
-          <ShieldCheck size={12} className="text-emerald-500/40" />
-          <span className="opacity-40">Zero-Trust Environment • No Exfiltration Detected</span>
-        </div>
-      </footer>
+        </footer>
+      )}
 
       <style>{`
         .no-shimmer .shimmer, 

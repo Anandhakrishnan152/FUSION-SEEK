@@ -33,11 +33,15 @@ export interface FileMetadata {
 }
 
 export interface BlockchainRecord {
+  index: number;
   timestamp: number;
   fileHash: string;
   documentId: string;
   action: 'REGISTRATION' | 'VERIFICATION' | 'MODIFICATION_CHECK';
   verified: boolean;
+  previousHash: string;
+  currentHash: string;
+  nonce?: number;
 }
 
 export interface SearchResult {

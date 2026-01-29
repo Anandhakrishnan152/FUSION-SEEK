@@ -47,17 +47,19 @@
       0%,
       100% {
         opacity: 0.5;
-        filter: blur(20px);
+        transform: scale(1);
       }
 
       50% {
         opacity: 0.8;
-        filter: blur(35px);
+        transform: scale(1.05);
       }
     }
 
     .animate-pulse-glow {
+      filter: blur(25px);
       animation: pulse-glow 4s ease-in-out infinite;
+      will-change: transform, opacity;
     }
 
     @keyframes scan {
