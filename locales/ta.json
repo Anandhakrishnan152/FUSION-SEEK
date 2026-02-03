@@ -1,0 +1,46 @@
+{
+    "app": {
+        "title": "FusionSeek",
+        "welcome": "FusionSeek-க்கு வரவேற்கிறோம்!",
+        "status": {
+            "online": "இணைப்பில்",
+            "indexing": "அட்டவணைப்படுத்தல்",
+            "offline": "இணைப்பில்லை",
+            "neuralLinkActive": "நியூரல் இணைப்பு செயலில்"
+        },
+        "search": {
+            "placeholder": "எதையும் கேளுங்கள்...",
+            "processing": "செயலாக்கப்படுகிறது..."
+        },
+        "sidebar": {
+            "subtitle": "புத்திசாலித்தனமான தேடல்",
+            "nav": {
+                "search": "தேடு",
+                "chat": "அரட்டை",
+                "profile": "சுயவிவரம்",
+                "userInfo": "பயனர் தகவல்",
+                "files": "கோப்புகள்",
+                "documents": "ஆவணங்கள்",
+                "security": "பாதுகாப்பு",
+                "logs": "பதிவுகள்",
+                "history": "வரலாறு",
+                "recent": "சமீபத்திய",
+                "system": "அமைப்பு",
+                "usage": "பயன்பாடு",
+                "settings": "அமைப்புகள்",
+                "config": "கட்டமைப்பு"
+            },
+            "upload": {
+                "button": "கோப்பை பதிவேற்று",
+                "processing": "பதிவேற்றப்படுகிறது..."
+            },
+            "clearHistory": "வரலாற்றை அழி",
+            "confirmClear": "நிச்சயமாக வரலாற்றை அழிக்க விரும்புகிறீர்களா?"
+        },
+        "settings": {
+            "language": "மொழி",
+            "theme": "தோற்றம்",
+            "voiceOutput": "குரல் வெளியீடு"
+        }
+    }
+}

@@ -26,40 +26,11 @@
     }
 
     /* Custom Animations */
-    @keyframes float {
 
-      0%,
-      100% {
-        transform: translateY(0px);
-      }
 
-      50% {
-        transform: translateY(-10px);
-      }
-    }
-
-    .animate-float {
-      animation: float 6s ease-in-out infinite;
-    }
-
-    @keyframes pulse-glow {
-
-      0%,
-      100% {
-        opacity: 0.5;
-        transform: scale(1);
-      }
-
-      50% {
-        opacity: 0.8;
-        transform: scale(1.05);
-      }
-    }
-
+    /* Animations disabled/simplified for performance */
     .animate-pulse-glow {
-      filter: blur(25px);
-      animation: pulse-glow 4s ease-in-out infinite;
-      will-change: transform, opacity;
+      opacity: 0.5;
     }
 
     @keyframes scan {
@@ -100,21 +71,7 @@
       animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
-    @keyframes shimmer {
-      0% {
-        background-position: -200% 0;
-      }
 
-      100% {
-        background-position: 200% 0;
-      }
-    }
-
-    .shimmer {
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
-      background-size: 200% 100%;
-      animation: shimmer 2s infinite;
-    }
 
     @keyframes spin-slow {
       from {
@@ -128,75 +85,6 @@
 
     .animate-spin-slow {
       animation: spin-slow 8s linear infinite;
-    }
-
-    /* Space Animations */
-    @keyframes twinkle {
-
-      0%,
-      100% {
-        opacity: 0.2;
-        transform: scale(0.5);
-      }
-
-      50% {
-        opacity: 1;
-        transform: scale(1.2);
-      }
-    }
-
-    .animate-twinkle {
-      animation: twinkle 4s ease-in-out infinite;
-    }
-
-    @keyframes meteor {
-      0% {
-        transform: rotate(215deg) translateX(0);
-        opacity: 1;
-      }
-
-      70% {
-        opacity: 1;
-      }
-
-      100% {
-        transform: rotate(215deg) translateX(-500px);
-        opacity: 0;
-      }
-    }
-
-    .animate-meteor {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 300px;
-      height: 1px;
-      background: linear-gradient(90deg, #ffffff, transparent);
-      animation: meteor 3s linear infinite;
-      opacity: 0;
-      transform-origin: left;
-    }
-
-    /* Cyber Grid Animation */
-    @keyframes grid-scroll {
-      0% {
-        background-position: 0 0;
-      }
-
-      100% {
-        background-position: 50px 50px;
-      }
-    }
-
-    .bg-grid-pattern {
-      background-size: 50px 50px;
-      background-image:
-        linear-gradient(to right, rgba(99, 102, 241, 0.1) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
-    }
-
-    .animate-grid-flow {
-      animation: grid-scroll 3s linear infinite;
     }
 
     /* Scrollbar Styling */
@@ -215,31 +103,6 @@
 
     ::-webkit-scrollbar-thumb:hover {
       background: #334155;
-    }
-
-    /* Particle Floating */
-    @keyframes float-particle {
-      0% {
-        transform: translateY(0) translateX(0);
-        opacity: 0;
-      }
-
-      20% {
-        opacity: 0.8;
-      }
-
-      80% {
-        opacity: 0.8;
-      }
-
-      100% {
-        transform: translateY(-100vh) translateX(50px);
-        opacity: 0;
-      }
-    }
-
-    .animate-particle {
-      animation: float-particle 15s linear infinite;
     }
 
     /* Typing Cursor */
@@ -265,18 +128,20 @@
       animation: blink 0.8s infinite;
     }
 
-    /* Glass Effect */
+    /* Simplified Glass Effect */
     .glass {
-      background: rgba(15, 23, 42, 0.6);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    body.dark .glass {
+      background: rgba(15, 23, 42, 0.9);
       border: 1px solid rgba(255, 255, 255, 0.08);
     }
   </style>
   <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
     "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",

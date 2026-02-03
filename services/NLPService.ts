@@ -124,21 +124,59 @@ const retrieveRelevantContext = async (query: string, files: FileMetadata[], top
     return topNodes.map(item => `--- SOURCE (${item.node.metadata.type}): ${item.node.metadata.sourceId} ---\n${item.node.text}`).join('\n\n');
 };
 
-import { performMultimodalRAG as geminiRAG } from "./geminiService";
+import { checkOllamaStatus } from "./ModelService";
 
 export const performMultimodalRAG = async (
     query: string,
-    files: FileMetadata[]
+    files: FileMetadata[],
+    language: string = 'en'
 ) => {
-    // Forward to Gemini Service for Demo
-    try {
-        const result = await geminiRAG(query, files);
-        return result;
-    } catch (error) {
-        console.error("Gemini Mode Failed, falling back to static search:", error);
-        // Fallback logic could go here, or just return error string
-        return "Error connecting to Gemini Model. Please check your API configuration.";
+    // 1. Try Local Ollama First
+    const ollamaOnline = await checkOllamaStatus();
+    if (getOllamaEnabled() && ollamaOnline) {
+        try {
+            console.log("Using Local Ollama Intelligence...");
+
+            // Retrieve Context
+            const context = await retrieveRelevantContext(query, files);
+
+            if (!context) {
+                const noMatchMessages = {
+                    en: "I analyzed your files but couldn't find a strong match for that query locally.",
+                    es: "Analicé sus archivos pero no pude encontrar una coincidencia sólida para esa consulta localmente.",
+                    ta: "உங்கள் கோப்புகளை நான் பகுப்பாய்வு செய்தேன், ஆனால் அந்தக் கேள்விக்கான வலுவான பொருத்தத்தை என்னால் கண்டுபிடிக்க முடியவில்லை."
+                };
+                return noMatchMessages[language as keyof typeof noMatchMessages] || noMatchMessages['en'];
+            }
+
+            // Construct Prompt
+            const messages = [
+                {
+                    role: "system",
+                    content: `You are FusionSeek's highly advanced Local Intelligence Node. 
+                    - Your answers must be ACCURATE, GRAMMATICALLY CORRECT, and FREE OF SPELLING ERRORS.
+                    - Analyze the provided CONTEXT from local files thoroughly.
+                    - Answer the user's query based ONLY on that context.
+                    - Do not hallucinate. If the answer isn't in the context, clearly state that.
+                    - Optimize your output for clarity and professionalism.
+                    - IMPORTANT: You MUST RESPOND IN THE FOLLOWING LANGUAGE: ${language === 'es' ? 'SPANISH' : language === 'ta' ? 'TAMIL' : 'ENGLISH'}.
+                    - If the target language is Tamil, ensure you use proper Tamil script.`
+                },
+                {
+                    role: "user",
+                    content: `CONTEXT:\n${context}\n\nUSER QUERY: ${query}`
+                }
+            ];
+
+            return await chatWithModel(messages);
+
+        } catch (e) {
+            console.warn("Local Inference Failed", e);
+            return "Error during local inference. Please check Ollama logs.";
+        }
     }
+
+    return "Ollama is offline or unreachable. Please enable local AI services.";
 };
 
 export const findSimilarImages = async (

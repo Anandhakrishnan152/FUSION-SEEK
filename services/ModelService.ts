@@ -2,13 +2,32 @@ const OLLAMA_BASE_URL = 'http://localhost:11434/api';
 const CHAT_MODEL = 'llama3';
 const VISION_MODEL = 'llava';
 const EMBED_MODEL = 'nomic-embed-text'; // Efficient embedding model
-const OLLAMA_ENABLED = false; // Module active
+const OLLAMA_ENABLED = true; // Module active
 
 export const getOllamaEnabled = () => OLLAMA_ENABLED;
 
+export const checkOllamaStatus = async (): Promise<boolean> => {
+    try {
+        const response = await fetch(`${OLLAMA_BASE_URL}/tags`);
+        if (!response.ok) return false;
+
+        const data = await response.json();
+        const models = data.models || [];
+        // Check if our core models exist
+        const hasLlama = models.some((m: any) => m.name.includes(CHAT_MODEL));
+
+        if (!hasLlama) {
+            console.warn(`Ollama is online but ${CHAT_MODEL} is missing.`);
+        }
+
+        return hasLlama;
+    } catch (e) {
+        return false;
+    }
+};
+
 export const generateEmbedding = async (text: string): Promise<number[]> => {
     if (!OLLAMA_ENABLED) {
-        console.warn("Ollama module is disabled. Returning placeholder embedding.");
         return Array(768).fill(0).map(() => Math.random());
     }
 
@@ -25,8 +44,8 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
         const data = await response.json();
         return data.embedding;
     } catch (e) {
-        console.error("Embedding generation failed (using random fallback for demo):", e);
-        return Array(768).fill(0).map(() => Math.random()); // Fallback if model missing
+        console.warn("Embedding generation failed (Ollama offline?), using random fallback:", e);
+        return Array(768).fill(0).map(() => Math.random());
     }
 };
 
@@ -52,9 +71,9 @@ export const generateImageDescription = async (base64Image: string): Promise<str
     }
 }
 
-export const chatWithModel = async (messages: any[]): Promise<string> => {
+export const chatWithModel = async (messages: any[], model: string = CHAT_MODEL): Promise<string> => {
     if (!OLLAMA_ENABLED) {
-        return "Ollama module is currently paused. System is operating in restricted offline mode without LLM inference.";
+        return "Ollama module is currently paused.";
     }
 
     try {
@@ -62,17 +81,18 @@ export const chatWithModel = async (messages: any[]): Promise<string> => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: CHAT_MODEL,
+                model: model,
                 messages: messages,
                 stream: false,
                 options: { temperature: 0.1 }
             })
         });
 
+
         const data = await response.json();
         return data.message.content || "I could not generate a response.";
     } catch (error) {
         console.error("RAG Error:", error);
-        return "Error generating response. Ensure Ollama is running.";
+        throw new Error("Ollama Unreachable");
     }
 }

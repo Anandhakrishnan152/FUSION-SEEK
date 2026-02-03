@@ -1,0 +1,46 @@
+{
+    "app": {
+        "title": "FusionSeek",
+        "welcome": "Welcome to FusionSeek!",
+        "status": {
+            "online": "Online",
+            "indexing": "Indexing",
+            "offline": "Offline",
+            "neuralLinkActive": "Neural Link Active"
+        },
+        "search": {
+            "placeholder": "Ask anything...",
+            "processing": "Processing..."
+        },
+        "sidebar": {
+            "subtitle": "Intelligent Search",
+            "nav": {
+                "search": "Search",
+                "chat": "Chat",
+                "profile": "Profile",
+                "userInfo": "User Info",
+                "files": "Files",
+                "documents": "Documents",
+                "security": "Security",
+                "logs": "Logs",
+                "history": "History",
+                "recent": "Recent",
+                "system": "System",
+                "usage": "Usage",
+                "settings": "Settings",
+                "config": "Config"
+            },
+            "upload": {
+                "button": "Upload File",
+                "processing": "Uploading..."
+            },
+            "clearHistory": "Clear History",
+            "confirmClear": "Are you sure you want to clear history?"
+        },
+        "settings": {
+            "language": "Language",
+            "theme": "Theme",
+            "voiceOutput": "Voice Output"
+        }
+    }
+}

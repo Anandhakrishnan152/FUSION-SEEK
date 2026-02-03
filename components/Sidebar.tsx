@@ -11,6 +11,7 @@ import {
     Loader2,
     Upload
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ViewType } from '../types';
 
 interface SidebarProps {
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     fileInputRef,
     handleFileUpload
 }) => {
+    const { t } = useTranslation();
     return (
         <aside className={`w-20 lg:w-72 flex flex-col border-r z-50 transition-all duration-500 ${theme === 'dark' ? 'border-white/5 glass' : 'border-slate-200 bg-white/80 backdrop-blur-xl'
             }`}>
@@ -42,19 +44,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 <div className="hidden lg:block overflow-hidden">
                     <h1 className={`text-lg font-black tracking-tighter leading-none ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>FUSIONSEEK</h1>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">The Neural Pulse of Your Data</p>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">{t('app.sidebar.subtitle')}</p>
                 </div>
             </div>
 
             <nav className="flex-1 px-4 space-y-2 mt-4">
                 {[
-                    { id: 'chat', label: 'Search Interface', icon: Search, desc: 'Natural Language' },
-                    { id: 'profile', label: 'Identity Node', icon: User, desc: 'Operative Access' },
-                    { id: 'vault', label: 'Multimodal Vault', icon: Database, desc: 'Local Indices' },
-                    { id: 'blockchain', label: 'Chain Ledger', icon: Network, desc: 'Provenance' },
-                    { id: 'history', label: 'Activity Logs', icon: History, desc: 'Past Searches' },
-                    { id: 'analytics', label: 'Dashboard', icon: BarChart3, desc: 'Insights' },
-                    { id: 'settings', label: 'Configuration', icon: Settings, desc: 'System' }
+                    { id: 'chat', label: t('app.sidebar.nav.search'), icon: Search, desc: t('app.sidebar.nav.chat') },
+                    { id: 'profile', label: t('app.sidebar.nav.profile'), icon: User, desc: t('app.sidebar.nav.userInfo') },
+                    { id: 'vault', label: t('app.sidebar.nav.files'), icon: Database, desc: t('app.sidebar.nav.documents') },
+                    { id: 'blockchain', label: t('app.sidebar.nav.security'), icon: Network, desc: t('app.sidebar.nav.logs') },
+                    { id: 'history', label: t('app.sidebar.nav.history'), icon: History, desc: t('app.sidebar.nav.recent') },
+                    { id: 'analytics', label: t('app.sidebar.nav.system'), icon: BarChart3, desc: t('app.sidebar.nav.usage') },
+                    { id: 'settings', label: t('app.sidebar.nav.settings'), icon: Settings, desc: t('app.sidebar.nav.config') }
                 ].map((item) => (
                     <button
                         key={item.id}
@@ -81,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }`}
                 >
                     {isIndexing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                    <span className="hidden lg:inline">{isIndexing ? 'Ingesting...' : 'Ingest Data'}</span>
+                    <span className="hidden lg:inline">{isIndexing ? t('app.sidebar.upload.processing') : t('app.sidebar.upload.button')}</span>
                 </button>
                 <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
             </div>

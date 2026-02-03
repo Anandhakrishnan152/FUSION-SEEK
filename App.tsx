@@ -52,26 +52,23 @@ import { FileMetadata, BlockchainRecord, ChatMessage, Modality, ViewType } from 
 import { performMultimodalRAG, findSimilarImages, processAndIndexFile } from './services/NLPService';
 import { blockchainService } from './services/BlockchainService';
 import { voiceService } from './services/VoiceService';
+import { checkOllamaStatus } from './services/ModelService';
+import { extractTextFromPDF } from './services/PdfService';
 import { DinoGame } from './components/DinoGame';
 import { Typewriter } from './components/Typewriter';
 import { BackgroundAnimations } from './components/BackgroundAnimations';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { ProfileView } from './components/ProfileView';
+import { useTranslation } from 'react-i18next'; // Add import
 import mammoth from 'mammoth';
 
 const WELCOME_MESSAGES = [
-  "Hey, User! Welcome to Fusion Seek, where your search for answers just got easier. What can I help you with today?",
-  "Hi User! 👋 It’s great to have you at Fusion Seek. I am Fusion, your personal guide to our intelligence nodes. Ready to explore?",
-  "Yo, User! 🎉 Welcome to Fusion Seek. Kick back, relax, and let me know if you need help finding something awesome!",
-  "Woohoo, you're here! 🎉 I'm Fusion, your friendly assistant at Fusion Seek. How can I make today amazing for you?",
-  "Hi there, User! 👋 Let's make this easy. Need help with something specific? Or want me to show you around?",
-  "Hey User, what brings you here today? Whether you're searching for something or just exploring, I’m here to help. Let's dive in!",
-  "Looking for something in particular? I’m Fusion, and I’m here to guide you. Don’t hesitate, let’s make discovery fun!",
-  "Welcome, User! I can see you're browsing. Need some suggestions or just want to chat about what’s indexed? Ask away!"
+  "Welcome to FusionSeek!"
 ];
 
 export default function App() {
+  const { t, i18n } = useTranslation(); // Initialize hook
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [blockchainLogs, setBlockchainLogs] = useState<BlockchainRecord[]>([]);
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
@@ -79,7 +76,7 @@ export default function App() {
     {
       id: 'welcome',
       role: 'assistant',
-      text: WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)],
+      text: t('app.welcome'), // Use translation
       verificationDetails: { filesChecked: 0, discrepancies: 0, blockchainStatus: 'SECURE' }
     }
   ]);
@@ -97,12 +94,35 @@ export default function App() {
   // Settings state
   const [modelType, setModelType] = useState<'pro' | 'flash'>('pro');
   const [securityLevel, setSecurityLevel] = useState<'standard' | 'strict' | 'paranoid'>('strict');
-  const [showNeuralShimmer, setShowNeuralShimmer] = useState(true);
+  const [showNeuralShimmer, setShowNeuralShimmer] = useState(false);
   const [showDinoGame, setShowDinoGame] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>('light');
 
   // Voice State
   const [voiceMode, setVoiceMode] = useState(false);
+
+  // Ollama State
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+
+  // Check Ollama Status
+  useEffect(() => {
+    const checkStatus = async () => {
+      const isConnected = await checkOllamaStatus();
+      setOllamaConnected(isConnected);
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, []);
+
+  // Theme Synchronization Effect
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove('dark');
+    }
+  }, [theme]);
 
   // Voice Service Effect
   useEffect(() => {
@@ -196,7 +216,15 @@ export default function App() {
           } else {
             content = await file.text();
           }
+        } else if (modality === 'pdf') {
+          // PDF Extraction Logic
+          if (file.type.includes('pdf')) {
+            content = await extractTextFromPDF(file);
+          } else {
+            content = "Binary file format not yet fully supported for deep content extraction (Metadata only).";
+          }
         } else {
+          // Images / Audio (Base64 for Description/Transcription)
           content = await new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve(e.target?.result as string);
@@ -254,7 +282,11 @@ export default function App() {
     await new Promise(r => setTimeout(r, 1500));
     setSearchStage('SYNTHESIZING');
 
-    const response = await performMultimodalRAG(searchQuery, files.filter(f => f.status === 'ready'));
+    const response = await performMultimodalRAG(
+      searchQuery,
+      files.filter(f => f.status === 'ready'),
+      i18n.language
+    );
 
     // Trigger Voice Response if enabled
     if (voiceMode) {
@@ -305,13 +337,9 @@ export default function App() {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden selection:bg-indigo-500/30 transition-colors duration-500 ease-in-out ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-slate-50 text-slate-900'
+    <div className={`flex h-screen overflow-hidden selection:bg-indigo-500/30 transition-colors duration-500 ease-in-out ${theme === 'dark' ? 'bg-[#020617] text-slate-100' : 'bg-white text-slate-900'
       } ${!showNeuralShimmer ? 'no-shimmer' : ''}`}>
-      {/* Background Decor */}
-      <div className="fixed inset-0 pointer-events-none opacity-20">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/20 blur-[120px] rounded-full animate-pulse-glow"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full animate-pulse-glow" style={{ animationDelay: '2s' }}></div>
-      </div>
+      {/* Background Decor Removed for Performance */}
 
       {showDinoGame && <DinoGame onClose={() => setShowDinoGame(false)} />}
 
@@ -337,6 +365,7 @@ export default function App() {
           setShowDinoGame={setShowDinoGame}
           voiceMode={voiceMode}
           setVoiceMode={setVoiceMode}
+          ollamaConnected={ollamaConnected}
         />
 
         {/* Dynamic Content Views */}
@@ -363,7 +392,7 @@ export default function App() {
                             {msg.role === 'user' ? <Terminal size={14} /> : <Activity size={14} />}
                           </div>
                           <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
-                            {msg.role === 'user' ? 'Local Proxy Query' : 'Multimodal Synthesis'}
+                            {msg.role === 'user' ? 'You' : 'Assistant'}
                           </span>
                           {msg.role === 'assistant' && msg.verificationDetails && (
                             <div className="ml-auto flex gap-3">
@@ -406,7 +435,7 @@ export default function App() {
                         </div>
                         <div>
                           <h4 className="text-[11px] font-black uppercase text-white tracking-[0.2em]">{searchStage.replace('_', ' ')}</h4>
-                          <p className="text-[10px] font-bold text-slate-500 tracking-widest mt-1">PIPELINE ACTIVE</p>
+                          <p className="text-[10px] font-bold text-slate-500 tracking-widest mt-1">{t('app.search.processing')}</p>
                         </div>
                       </div>
                     </div>
@@ -428,7 +457,7 @@ export default function App() {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                        placeholder="Search Multimodal Context..."
+                        placeholder={t('app.search.placeholder')}
                         className={`flex-1 bg-transparent border-none outline-none text-sm md:text-base py-3 px-2 font-medium ${theme === 'dark' ? 'text-white' : 'text-slate-900'
                           }`}
                       />
@@ -452,7 +481,7 @@ export default function App() {
                       <div className="w-8 md:w-12 h-[1px] bg-indigo-500"></div>
                       <span className="text-[10px] md:text-[11px] font-black text-indigo-400 uppercase tracking-[0.3em]">Temporal Logs</span>
                     </div>
-                    <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Activity Logs</h2>
+                    <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400' : 'text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600'}`}>Activity Logs</h2>
                   </div>
                   <button
                     onClick={clearHistory}
@@ -467,7 +496,7 @@ export default function App() {
                   <div className="lg:col-span-1 space-y-6 md:space-y-8">
                     <div className="flex items-center gap-3 mb-4 md:mb-6">
                       <Zap size={20} className="text-amber-400" />
-                      <h3 className="text-lg md:text-xl font-black text-white uppercase italic">Quick Recall</h3>
+                      <h3 className={`text-lg md:text-xl font-black uppercase italic ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`}>Quick Recall</h3>
                     </div>
                     {recentQueries.length === 0 ? (
                       <div className="glass p-6 md:p-10 rounded-3xl border-dashed border-white/10 text-center opacity-40">
@@ -483,7 +512,7 @@ export default function App() {
                               className="flex-1 text-left mr-4 overflow-hidden"
                             >
                               <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Query {i + 1}</div>
-                              <div className="text-sm font-bold text-white truncate w-full">{q}</div>
+                              <div className={`text-sm font-bold truncate w-full ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{q}</div>
                             </button>
                             <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                               <button
@@ -511,14 +540,14 @@ export default function App() {
                   <div className="lg:col-span-2 space-y-6 md:space-y-8">
                     <div className="flex items-center gap-3 mb-4 md:mb-6">
                       <MessageSquare size={20} className="text-indigo-400" />
-                      <h3 className="text-lg md:text-xl font-black text-white uppercase italic">Neural Activity Timeline</h3>
+                      <h3 className={`text-lg md:text-xl font-black uppercase italic ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Neural Activity Timeline</h3>
                     </div>
 
                     <div className="relative pl-4 md:pl-8 border-l border-white/5 space-y-8 md:space-y-12">
                       {chatHistory.slice(1).length === 0 ? (
                         <div className="glass p-12 md:p-20 rounded-[3rem] text-center border-white/5 opacity-40">
                           <Calendar size={48} className="mx-auto mb-6" />
-                          <h4 className="text-base md:text-lg font-black text-white uppercase italic mb-2">No Session Activity</h4>
+                          <h4 className={`text-base md:text-lg font-black uppercase italic mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>No Session Activity</h4>
                           <p className="text-[10px] font-bold uppercase tracking-widest">Active nodes awaiting user prompt injection.</p>
                         </div>
                       ) : (
@@ -527,19 +556,19 @@ export default function App() {
                             {/* Timeline Node */}
                             <div className={`absolute -left-[23px] md:-left-[45px] top-4 w-3 h-3 md:w-4 md:h-4 rounded-full border-2 bg-[#020617] transition-all group-hover:scale-125 ${msg.role === 'user' ? 'border-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]'}`}></div>
 
-                            <div className="glass p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-white/5 hover:border-white/10 transition-all shadow-2xl relative overflow-hidden">
+                            <div className={`glass p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] hover:border-white/10 transition-all shadow-2xl relative overflow-hidden ${theme === 'dark' ? 'border-white/5' : 'border-slate-200'}`}>
                               <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-4">
                                 <div className="flex items-center gap-2 md:gap-3">
                                   <span className={`text-[9px] md:text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${msg.role === 'user' ? 'bg-indigo-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
                                     {msg.role}
                                   </span>
-                                  <span className="text-[9px] md:text-[10px] font-black text-slate-500 mono uppercase tracking-widest hidden sm:inline">Node ID: {msg.id.slice(-6)}</span>
+                                  <span className="text-[9px] md:text-[10px] font-black text-slate-500 mono uppercase tracking-widest hidden sm:inline">ID: {msg.id.slice(-6)}</span>
                                 </div>
                                 <div className="text-[9px] md:text-[10px] font-bold text-slate-600 uppercase tracking-widest">
-                                  Proxy Response :: Secure
+                                  Secure Response
                                 </div>
                               </div>
-                              <div className={`leading-relaxed line-clamp-3 text-slate-300 italic ${msg.role === 'assistant' ? 'text-sm' : 'text-base font-bold'}`}>
+                              <div className={`leading-relaxed line-clamp-3 italic ${msg.role === 'assistant' ? 'text-sm' : 'text-base font-bold'} ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
                                 "{msg.text}"
                               </div>
                               <div className="mt-6 flex justify-end">
@@ -571,7 +600,7 @@ export default function App() {
                       <div className="w-8 md:w-12 h-[1px] bg-indigo-500"></div>
                       <span className="text-[10px] md:text-[11px] font-black text-indigo-400 uppercase tracking-[0.3em]">Neural Repository</span>
                     </div>
-                    <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Data Vault</h2>
+                    <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400' : 'text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-600'}`}>Data Vault</h2>
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-4 glass p-4 rounded-3xl border-white/5 shadow-2xl w-full md:w-auto">
@@ -604,13 +633,13 @@ export default function App() {
                     <div className="bg-indigo-500/10 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8">
                       <HardDrive className="text-indigo-400" size={40} />
                     </div>
-                    <h3 className="text-2xl font-black text-white mb-4 uppercase">Node Void</h3>
+                    <h3 className={`text-2xl font-black mb-4 uppercase ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Node Void</h3>
                     <p className="text-slate-500 text-sm max-w-sm mx-auto mb-10 uppercase tracking-[0.2em] font-bold">No active vectors found in the current partition.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
                     {filteredFiles.map((file, i) => (
-                      <div key={file.id} className="group relative glass rounded-[2.5rem] p-6 md:p-8 transition-all duration-500 animate-slide-up overflow-hidden hover:border-indigo-500/40">
+                      <div key={file.id} className={`group relative glass rounded-[2.5rem] p-6 md:p-8 transition-all duration-500 animate-slide-up overflow-hidden hover:border-indigo-500/40 ${theme === 'dark' ? 'border shadow' : 'border border-slate-200 shadow-xl'}`}>
                         <div className="flex items-start justify-between mb-8">
                           <div className={`p-4 rounded-2xl shadow-lg ${file.status === 'indexing' ? 'bg-amber-500/10 text-amber-500 animate-pulse' :
                             file.modality === 'image' ? 'bg-rose-500/10 text-rose-400' :
@@ -623,10 +652,10 @@ export default function App() {
                             {file.status}
                           </span>
                         </div>
-                        <h4 className="text-xl font-black mb-2 truncate text-white tracking-tight">{file.name}</h4>
+                        <h4 className={`text-xl font-black mb-2 truncate tracking-tight ${theme === 'dark' ? 'text-sky-300' : 'text-sky-600'}`}>{file.name}</h4>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-8">{file.type} • {(file.size / 1024).toFixed(1)} KB</p>
                         <div className="mt-8 flex gap-3">
-                          <button onClick={() => handleDownload(file)} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 border border-white/5">
+                          <button onClick={() => handleDownload(file)} className={`flex-1 hover:bg-white/10 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 border ${theme === 'dark' ? 'bg-white/5 text-white border-white/5' : 'bg-slate-900 text-white border-slate-900'}`}>
                             <Download size={14} /> Access
                           </button>
                         </div>
@@ -648,7 +677,7 @@ export default function App() {
                       <ShieldCheck size={44} className="animate-float" />
                     </div>
                     <div>
-                      <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Chain Ledger</h2>
+                      <h2 className={`text-3xl md:text-5xl font-black italic tracking-tighter uppercase ${theme === 'dark' ? 'text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400' : 'text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600'}`}>Chain Ledger</h2>
                       <p className="text-slate-500 text-[10px] md:text-[11px] uppercase font-bold tracking-[0.4em] mt-2">Active Provenance Nodes: {Math.floor(Math.random() * 20) + 5}</p>
                     </div>
                   </div>
@@ -663,7 +692,7 @@ export default function App() {
                             <span className="text-[9px] md:text-[10px] font-black px-3 py-1 bg-emerald-500 text-slate-950 rounded-full uppercase">{log.action}</span>
                             <span className="text-[10px] md:text-[11px] font-black mono text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
                           </div>
-                          <div className="text-sm font-bold text-white mb-2 truncate">{log.documentId}</div>
+                          <div className={`text-sm font-bold mb-2 truncate ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{log.documentId}</div>
                           <div className="text-[10px] mono text-slate-500 truncate">{log.fileHash}</div>
                         </div>
                       </div>
@@ -689,7 +718,7 @@ export default function App() {
                             }}></div>
                         ))}
                       </div>
-                      <h4 className="text-xl font-black text-white italic uppercase">Network Integrity</h4>
+                      <h4 className={`text-xl font-black italic uppercase ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'}`}>Network Integrity</h4>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-black/40 p-3 rounded-2xl border border-white/5">
                           <div className="text-[9px] font-black text-slate-500 uppercase">Peers</div>
@@ -717,7 +746,7 @@ export default function App() {
                     <PieChart size={40} />
                   </div>
                   <div>
-                    <h2 className={`text-3xl md:text-5xl font-black italic uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Insights</h2>
+                    <h2 className={`text-3xl md:text-5xl font-black italic uppercase tracking-tighter ${theme === 'dark' ? 'text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-pink-400' : 'text-transparent bg-clip-text bg-gradient-to-r from-rose-600 to-pink-600'}`}>Insights</h2>
                     <p className="text-slate-500 text-[10px] md:text-[11px] font-black uppercase tracking-[0.4em]">Node Intelligence & Performance Dashboard</p>
                   </div>
                 </div>
@@ -728,7 +757,7 @@ export default function App() {
                       <span className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Storage Partition</span>
                       <HardDrive size={20} className="text-indigo-400" />
                     </div>
-                    <div className="text-3xl md:text-4xl font-black text-white mono">{(stats.totalSize / (1024 * 1024)).toFixed(2)} MB</div>
+                    <div className={`text-3xl md:text-4xl font-black mono ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{(stats.totalSize / (1024 * 1024)).toFixed(2)} MB</div>
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                       <div className="h-full bg-indigo-500" style={{ width: '15%' }}></div>
                     </div>
@@ -739,7 +768,7 @@ export default function App() {
                       <span className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Average Trust</span>
                       <ShieldCheck size={20} className="text-emerald-400" />
                     </div>
-                    <div className="text-3xl md:text-4xl font-black text-white mono">{stats.avgTrust.toFixed(1)}%</div>
+                    <div className={`text-3xl md:text-4xl font-black mono ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{stats.avgTrust.toFixed(1)}%</div>
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                       <div className="h-full bg-emerald-500" style={{ width: `${stats.avgTrust}%` }}></div>
                     </div>
@@ -750,7 +779,7 @@ export default function App() {
                       <span className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">Semantic Density</span>
                       <Zap size={20} className="text-amber-400" />
                     </div>
-                    <div className="text-3xl md:text-4xl font-black text-white mono">{files.filter(f => f.status === 'ready').length * 12}K</div>
+                    <div className={`text-3xl md:text-4xl font-black mono ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{files.filter(f => f.status === 'ready').length * 12}K</div>
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                       <div className="h-full bg-amber-500" style={{ width: '45%' }}></div>
                     </div>
@@ -760,7 +789,7 @@ export default function App() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="glass p-8 md:p-10 rounded-[3rem] md:rounded-[4rem] border-white/5">
-                    <h4 className="text-xl font-black text-white mb-8 uppercase italic">Modality Distribution</h4>
+                    <h4 className={`text-xl font-black mb-8 uppercase italic ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Modality Distribution</h4>
                     <div className="space-y-6">
                       {[
                         { name: 'Documents', count: stats.modalityCounts.text || 0, color: 'bg-blue-500' },
@@ -771,14 +800,14 @@ export default function App() {
                         <div key={m.name} className="flex items-center gap-6">
                           <div className={`w-3 h-3 rounded-full ${m.color}`}></div>
                           <span className="flex-1 text-[11px] font-bold uppercase text-slate-400">{m.name}</span>
-                          <span className="text-sm font-black text-white mono">{m.count} Nodes</span>
+                          <span className={`text-sm font-black mono ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{m.count} Nodes</span>
                         </div>
                       ))}
                     </div>
                   </div>
                   <div className="glass p-8 md:p-10 rounded-[3rem] md:rounded-[4rem] border-white/5 flex flex-col justify-center items-center text-center">
                     <CpuIcon size={48} className="text-indigo-400 mb-6 animate-pulse" />
-                    <h4 className="text-xl font-black text-white mb-4 uppercase italic">Inference Engine Health</h4>
+                    <h4 className={`text-xl font-black mb-4 uppercase italic ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Inference Engine Health</h4>
                     <div className="flex gap-4 mb-6">
                       <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black rounded-full">ACTIVE</div>
                       <div className="px-4 py-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black rounded-full">OPTIMAL</div>
@@ -804,7 +833,7 @@ export default function App() {
                     <Settings size={40} />
                   </div>
                   <div>
-                    <h2 className={`text-3xl md:text-5xl font-black italic uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Config</h2>
+                    <h2 className={`text-3xl md:text-5xl font-black italic uppercase tracking-tighter ${theme === 'dark' ? 'text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-slate-400' : 'text-transparent bg-clip-text bg-gradient-to-r from-slate-700 to-slate-900'}`}>Config</h2>
                     <p className="text-slate-500 text-[10px] md:text-[11px] font-black uppercase tracking-[0.4em]">Intelligence & Security Preferences</p>
                   </div>
                 </div>
@@ -813,22 +842,21 @@ export default function App() {
                   <section className="glass p-8 md:p-10 rounded-[4rem] border-white/5">
                     <div className="flex items-center gap-4 mb-10">
                       <Activity size={24} className="text-indigo-400" />
-                      <h3 className="text-xl font-black text-white uppercase italic">Intelligence Model</h3>
+                      <h3 className={`text-xl font-black uppercase italic ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Intelligence Model</h3>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 gap-6">
+                      {/* Ollama Card */}
                       <button
-                        onClick={() => setModelType('pro')}
-                        className={`p-8 rounded-[2.5rem] text-left transition-all border ${modelType === 'pro' ? 'bg-indigo-500 border-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.2)]' : 'bg-black/40 border-white/10 hover:border-white/20'}`}
+                        disabled={true}
+                        className={`p-8 rounded-[2.5rem] text-left transition-all border ${ollamaConnected ? 'bg-sky-500 border-sky-400 shadow-[0_0_30px_rgba(56,189,248,0.3)]' : 'bg-black/40 border-white/10 opacity-50'}`}
                       >
-                        <h4 className="text-lg font-black text-white mb-2 uppercase">Gemini 3 Pro</h4>
-                        <p className={`text-[10px] font-bold uppercase tracking-wider ${modelType === 'pro' ? 'text-indigo-100' : 'text-slate-500'}`}>High-fidelity reasoning & complex multimodal RAG.</p>
-                      </button>
-                      <button
-                        onClick={() => setModelType('flash')}
-                        className={`p-8 rounded-[2.5rem] text-left transition-all border ${modelType === 'flash' ? 'bg-indigo-500 border-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.2)]' : 'bg-black/40 border-white/10 hover:border-white/20'}`}
-                      >
-                        <h4 className="text-lg font-black text-white mb-2 uppercase">Gemini 3 Flash</h4>
-                        <p className={`text-[10px] font-bold uppercase tracking-wider ${modelType === 'flash' ? 'text-indigo-100' : 'text-slate-500'}`}>Low-latency synthesis & rapid metadata generation.</p>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className={`text-lg font-black uppercase ${ollamaConnected ? 'text-white' : 'text-slate-500'}`}>Ollama Local Intelligence</h4>
+                          {ollamaConnected && <div className="px-2 py-0.5 bg-white/20 rounded-full text-[9px] font-black text-white uppercase">Active</div>}
+                        </div>
+                        <p className={`text-[10px] font-bold uppercase tracking-wider ${ollamaConnected ? 'text-sky-100' : 'text-slate-500'}`}>
+                          {ollamaConnected ? 'Llama3 & LlaVa running locally. 100% Privacy.' : 'Local inference node offline. Please ensure Ollama is running.'}
+                        </p>
                       </button>
                     </div>
                   </section>
@@ -836,7 +864,7 @@ export default function App() {
                   <section className="glass p-10 rounded-[4rem] border-white/5">
                     <div className="flex items-center gap-4 mb-10">
                       <Shield size={24} className="text-emerald-400" />
-                      <h3 className="text-xl font-black text-white uppercase italic">Security Protocol</h3>
+                      <h3 className={`text-xl font-black uppercase italic ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Security Protocol</h3>
                     </div>
                     <div className="space-y-4">
                       {['standard', 'strict', 'paranoid'].map(level => (
